@@ -1,4 +1,4 @@
-package android.coolweather.com.coolweather.fragment;
+package android.coolweather.com.coolweather;
 
 import android.app.ProgressDialog;
 import android.coolweather.com.coolweather.R;
@@ -32,9 +32,9 @@ import okhttp3.Call;
 import okhttp3.Response;
 
 public class ChooseAreaFragment extends Fragment {
-    public static int LEVEL_PROVINCE=0;
-    public static int LEVEL_CITY=1;
-    public static int LEVEL_COUNTY=2;
+    public static final int LEVEL_PROVINCE=0;
+    public static final int LEVEL_CITY=1;
+    public static final int LEVEL_COUNTY=2;
     private ProgressDialog progressDialog;
     private TextView titleText;
     private ListView listView;
@@ -103,6 +103,7 @@ public class ChooseAreaFragment extends Fragment {
                 }
             }
         });
+        queryProvinces();
     }
     /**
      * 查询全国所有的省，优先从数据库查询，如果没有查询到再去服务器上查询
@@ -121,7 +122,7 @@ public class ChooseAreaFragment extends Fragment {
             currentLevel=LEVEL_PROVINCE;
         }else {
             String address="http://guolin.tech/api/china";
-            queryFromSever(address,"province");
+            queryFromServer(address,"province");
         }
     }
     /**
@@ -130,7 +131,7 @@ public class ChooseAreaFragment extends Fragment {
     private void queryCities(){
         titleText.setText(selectedProvince.getProvinceName());
         backButton.setVisibility(View.VISIBLE);
-        cityList=DataSupport.where("province=?",String.valueOf(selectedProvince.getId())).find(City.class);
+        cityList=DataSupport.where("provinceid=?",String.valueOf(selectedProvince.getId())).find(City.class);
         if(cityList.size()>0){
             datalist.clear();
             for(City city:cityList){
@@ -142,7 +143,7 @@ public class ChooseAreaFragment extends Fragment {
         }else{
             int provinceCode=selectedProvince.getProvinceCode();
             String address="http://guolin.tech/api/china/"+provinceCode;
-            queryFromSever(address,"city");
+            queryFromServer(address,"city");
         }
     }
     /**
@@ -164,18 +165,25 @@ public class ChooseAreaFragment extends Fragment {
             int provinceCode=selectedProvince.getProvinceCode();
             int cityCode=selectedCity.getCityCode();
             String address="http://guolin.tech/api/china/"+provinceCode+"/"+cityCode;
-            queryFromSever(address,"county");
+            queryFromServer(address,"county");
         }
     }
     /**
      * 根据传入的地址和类型从服务器上查询省市县数据
      */
-    private void queryFromSever(String address,final String type){
+    private void queryFromServer(String address,final String type){
         showProgressDialog();
         HttpUtil.sendOkHttpRequest(address, new okhttp3.Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
-
+                //通过runOnUiThread()方法返回主线程
+                getActivity().runOnUiThread(new Runnable(){
+                    @Override
+                    public void run(){
+                        closeProgressDialog();
+                        android.widget.Toast.makeText(getContext(),"加载失败...",android.widget.Toast.LENGTH_LONG).show();
+                    }
+                });
             }
 
             @Override
