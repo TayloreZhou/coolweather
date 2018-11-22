@@ -1,15 +1,23 @@
 package android.coolweather.com.coolweather;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.coolweather.com.coolweather.gson.Forecast;
 import android.coolweather.com.coolweather.gson.Weather;
+import android.coolweather.com.coolweather.manager.WeatherManager;
 import android.coolweather.com.coolweather.service.AutoUpdateService;
 import android.coolweather.com.coolweather.util.HttpUtil;
 import android.coolweather.com.coolweather.util.Utility;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.os.Build;
 import android.preference.PreferenceManager;
+import android.support.v4.app.NotificationCompat;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v4.widget.SwipeRefreshLayout;
@@ -38,6 +46,11 @@ import okhttp3.Response;
 import static java.lang.System.load;
 
 public class WeatherActivity extends AppCompatActivity {
+    /**
+     * 背景设置判断
+     */
+    public static final int BG_DAY=0;
+    public static final int BG_FILE=0;
     public static String weatherID;
     public DrawerLayout drawerLayout;
     private Button navButton;
@@ -53,7 +66,7 @@ public class WeatherActivity extends AppCompatActivity {
     private TextView comfortText;
     private TextView carWashText;
     private TextView sportText;
-    private ImageView bingPicImg;
+    public ImageView bingPicImg;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -99,11 +112,13 @@ public class WeatherActivity extends AppCompatActivity {
                 requestWeather(weatherID);
             }
         });
-        String bingPic=prefs.getString("bing_pic",null );
-        if(bingPic!=null){
-            Glide.with(this).load(bingPic).into(bingPicImg);
-        }else{
-            loadBingPic();
+        if(WeatherManager.backGrounfNumber==WeatherActivity.BG_DAY) {
+            String bingPic = prefs.getString("bing_pic", null);
+            if (bingPic != null) {
+                Glide.with(this).load(bingPic).into(bingPicImg);
+            } else {
+                loadBingPic();
+            }
         }
         navButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -111,6 +126,7 @@ public class WeatherActivity extends AppCompatActivity {
                 drawerLayout.openDrawer(GravityCompat.START);
             }
         });
+        WeatherManager.weatherActivity=this;
     }
     /**
      * 根据天气id请求城市天气信息
@@ -156,27 +172,29 @@ public class WeatherActivity extends AppCompatActivity {
      * 加载必应每日一图
      */
     private void loadBingPic(){
-        String requestBingPic="http://guolin.tech/api/bing_pic";
-        HttpUtil.sendOkHttpRequest(requestBingPic, new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                e.printStackTrace();
-            }
+        if(WeatherManager.backGrounfNumber==WeatherActivity.BG_DAY) {
+            String requestBingPic = "http://guolin.tech/api/bing_pic";
+            HttpUtil.sendOkHttpRequest(requestBingPic, new Callback() {
+                @Override
+                public void onFailure(Call call, IOException e) {
+                    e.printStackTrace();
+                }
 
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-                final String bingPic=response.body().string();
-                SharedPreferences.Editor editor=PreferenceManager.getDefaultSharedPreferences(WeatherActivity.this).edit();
-                editor.putString("bing_pic",bingPic);
-                editor.apply();
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        Glide.with(WeatherActivity.this).load(bingPic).into(bingPicImg);
-                    }
-                });
-            }
-        });
+                @Override
+                public void onResponse(Call call, Response response) throws IOException {
+                    final String bingPic = response.body().string();
+                    SharedPreferences.Editor editor = PreferenceManager.getDefaultSharedPreferences(WeatherActivity.this).edit();
+                    editor.putString("bing_pic", bingPic);
+                    editor.apply();
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Glide.with(WeatherActivity.this).load(bingPic).into(bingPicImg);
+                        }
+                    });
+                }
+            });
+        }
     }
     /**
      * 处理并展示Weather实体类中的数据
@@ -187,6 +205,63 @@ public class WeatherActivity extends AppCompatActivity {
             String updateTime = weather.basic.update.updateTime.split(" ")[1];
             String degree = weather.now.temperature + "'C";
             String weatherInfo = weather.now.more.info;
+            NotificationManager careManager;
+            NotificationChannel channel;
+            Notification notification;
+            /**
+             * 小家伙：提醒主人要做好的防护
+             */
+            String someMessageFromBigGuy;
+            careManager=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+            String channelId="care_notice_xh";
+            switch(weatherInfo){
+                case "阴":
+                    someMessageFromBigGuy="下雨预定!!带伞啦!!";
+                    break;
+                case "多云":
+                    someMessageFromBigGuy="天气不错哦!可以出去散个步~";
+                    break;
+                case "晴":
+                    someMessageFromBigGuy="太阳有点大!还是宅吧!";
+                    break;
+                case "小雨":
+                    someMessageFromBigGuy="出门头发会湿!要撑伞的";
+                    break;
+                case "中雨":
+                    someMessageFromBigGuy="出去就变落汤鸡!(50/100)小心感冒!";
+                    break;
+                case "大雨":
+                    someMessageFromBigGuy="出去就变落汤鸡!(80/100)小心感冒!";
+                    break;
+                case "暴雨":
+                    someMessageFromBigGuy="安静的做个可爱的小家伙吧，别着凉";
+                    break;
+                default:
+                    someMessageFromBigGuy="呀!没考虑到这个天气";
+                    break;
+            }
+            if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O){
+                channel=new NotificationChannel(channelId,"cares",NotificationManager.IMPORTANCE_DEFAULT);
+                careManager.createNotificationChannel(channel);
+                notification=new NotificationCompat.Builder(WeatherActivity.this,channelId)
+                        .setContentTitle("小家伙")
+                        .setContentText(someMessageFromBigGuy)
+                        .setWhen(System.currentTimeMillis())
+                        .setSmallIcon(R.drawable.ic_home)
+                        .setLargeIcon(BitmapFactory.decodeResource(getResources(),R.drawable.ic_home))
+                        .setPriority(NotificationCompat.PRIORITY_MAX)
+                        .build();
+                careManager.notify(1,notification);
+            }else{
+                notification=new NotificationCompat.Builder(WeatherActivity.this)
+                        .setContentTitle("小家伙")
+                        .setContentText(someMessageFromBigGuy)
+                        .setWhen(System.currentTimeMillis())
+                        .setSmallIcon(R.drawable.ic_home)
+                        .setLargeIcon(BitmapFactory.decodeResource(getResources(),R.drawable.ic_home))
+                        .build();
+                careManager.notify(1,notification);
+            }
             titleCity.setText(cityName);
             titleUpdateTime.setText(updateTime);
             degreeText.setText(degree);
